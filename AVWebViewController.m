@@ -42,6 +42,7 @@
 @synthesize actionItem = _actionItem;
 @synthesize fixedSpaceItem = _fixedSpaceItem;
 @synthesize flexibleSpaceItem = _flexibleSpaceItem;
+@synthesize allowsSendingHTMLContents = _allowsSendingHTMLContents;
 
 
 #pragma mark -
@@ -324,7 +325,13 @@ static NSString * const kAVWebViewControllerNavigationControllerToolbarWasHidden
 		MFMailComposeViewController *composer = [[MFMailComposeViewController alloc] init]; 
 
 		[composer setMailComposeDelegate: self]; 
-		[composer setMessageBody: [self.representedURL absoluteString] isHTML: NO];
+		
+		if (self.allowsSendingHTMLContents) {
+			[composer setMessageBody:[self.webView stringByEvaluatingJavaScriptFromString:@"document.head.innerHTML + document.body.innerHTML"] isHTML:YES];
+		} else {
+			[composer setMessageBody: [self.representedURL absoluteString] isHTML: NO];
+		}
+		
 		[self presentModalViewController: composer animated: YES];
 		[composer release];
 	}

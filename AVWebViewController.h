@@ -34,4 +34,6 @@
 
 - (void) reload;
 
+@property (nonatomic, assign) BOOL allowsSendingHTMLContents; // defaults to NO
+
 @end
