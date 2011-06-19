@@ -143,6 +143,16 @@
 	return _indicatorItem;
 }
 
+- (UIBarButtonItem *) loadItem
+{
+	if (_loadItem == nil)
+		_loadItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem: self.webView.isLoading ? UIBarButtonSystemItemStop : UIBarButtonSystemItemRefresh 
+																  target: self 
+																  action: @selector(reload)];
+	
+	return _loadItem;
+}
+
 - (UIBarButtonItem *) actionItem
 {
 	if (_actionItem == nil)
@@ -234,9 +244,6 @@ static NSString * const kAVWebViewControllerNavigationControllerToolbarWasHidden
 
 - (void) updateToolbar
 {
-	self.loadItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem: self.webView.isLoading ? UIBarButtonSystemItemStop : UIBarButtonSystemItemRefresh 
-																  target: self 
-																  action: self.webView.isLoading ? @selector(stopLoading) : @selector(reload)];
 	self.toolbarItems = [NSArray arrayWithObjects: 
 						 self.fixedSpaceItem, 
 						 self.backItem, 
@@ -251,7 +258,13 @@ static NSString * const kAVWebViewControllerNavigationControllerToolbarWasHidden
 						 self.fixedSpaceItem, 
 						 nil];
 
-	self.webView.isLoading ? [self.indicatorView startAnimating] : [self.indicatorView stopAnimating] ;
+	if (self.webView.isLoading) {
+		self.loadItem.action = @selector(stopLoading);
+		[self.indicatorView startAnimating];
+	} else {
+		self.loadItem.action = @selector(reload);
+		[self.indicatorView stopAnimating];
+	}
 }
 
 - (void) showActionSheet
