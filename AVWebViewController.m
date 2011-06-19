@@ -9,12 +9,14 @@
 
 #pragma mark Class continuation
 
-@interface AVWebViewController ()
+@interface AVWebViewController () <UIWebViewDelegate, UIActionSheetDelegate, MFMailComposeViewControllerDelegate>
 
 - (void) updateUI;
 - (void) updateToolbar;
 - (void) showActionSheet;
 - (void) stopLoading;
+
+- (void) setRepresentedURL:(NSURL *)newURL triggeringRequestLoad:(BOOL)shouldLoadRequestIfAppropriate;
 
 @property (nonatomic, retain) UIWebView *webView;
 @property (nonatomic, retain) UIBarButtonItem *backItem;
@@ -30,7 +32,7 @@
 
 @implementation AVWebViewController
 
-@synthesize URLString = _URLString;
+@synthesize representedURL = _representedURL;
 @synthesize webView = _webView;
 @synthesize backItem = _backItem;
 @synthesize forwardItem = _forwardItem;
@@ -45,10 +47,24 @@
 #pragma mark -
 #pragma mark Initialization
 
-- (id) initWithURLString: (NSString *) URLString
+- (id) initWithURL: (NSURL *) anURL
 {
 	self = [super initWithNibName: nil bundle: nil];
-	self.URLString = URLString;
+	if (!self)
+		return nil;
+		
+	self.representedURL = anURL;
+	self.hidesBottomBarWhenPushed = NO;
+		
+	return self;
+}
+
+- (id) initWithURLString: (NSString *) URLString
+{
+	self = [self initWithURL:[NSURL URLWithString:URLString]];
+	
+	if (!self.representedURL.scheme)
+		self.representedURL = [NSURL URLWithString:[@"http://" stringByAppendingString:URLString]];
 
 	return self;
 }
@@ -56,14 +72,26 @@
 #pragma mark -
 #pragma mark Setter overrides
 
-- (void) setURLString: (NSString *) URLString
+- (void) setRepresentedURL:(NSURL *)newURL
 {
-	[_URLString release];
+	[self setRepresentedURL:newURL triggeringRequestLoad:YES];
+}
 
-	_URLString = [URLString copy];
+- (void) setRepresentedURL:(NSURL *)newURL triggeringRequestLoad:(BOOL)shouldLoadRequestIfAppropriate 
+{
+	if (_representedURL == newURL || [_representedURL isEqual:newURL])
+		return;
+		
+	[self willChangeValueForKey:@"representedURL"];
+	[_representedURL release];
+	_representedURL = [newURL copy];
+	[self didChangeValueForKey:@"representedURL"];
 
-	if (self.webView != nil)
-		[self.webView loadRequest: [NSURLRequest requestWithURL: [NSURL URLWithString: self.URLString]]];
+	if (![self isViewLoaded])
+		return;
+		
+	if (shouldLoadRequestIfAppropriate)
+		[self.webView loadRequest: [NSURLRequest requestWithURL: _representedURL]];
 }
 
 #pragma mark -
@@ -147,9 +175,7 @@
 
 - (void) loadView
 {
-	[super loadView]; // technically illegal, may cause infinite recursion below if Apple changes how things work in the back
-
-	self.webView = [[[UIWebView alloc] initWithFrame: CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height)] autorelease];
+	self.webView = [[[UIWebView alloc] initWithFrame: CGRectZero] autorelease];
 	self.webView.delegate = self;
 	self.webView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 	self.webView.scalesPageToFit = YES;
@@ -158,14 +184,19 @@
 
 - (void) viewDidLoad
 {
-    [super viewDidLoad];
-	[self.webView loadRequest: [NSURLRequest requestWithURL: [NSURL URLWithString: self.URLString]]];
+	[super viewDidLoad];
+	[self.webView loadRequest: [NSURLRequest requestWithURL: _representedURL]];
 }
+
+static NSString * const kAVWebViewControllerNavigationControllerToolbarWasHidden = @"kAVWebViewControllerNavigationControllerToolbarWasHidden";
 
 - (void) viewWillAppear: (BOOL) animated
 {
-    [super viewWillAppear: animated];
+	[super viewWillAppear: animated];
 
+	id boundValue = self.navigationController.toolbarHidden ? (id)kCFBooleanTrue : (id)kCFBooleanFalse;
+	objc_setAssociatedObject(self, kAVWebViewControllerNavigationControllerToolbarWasHidden, boundValue, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+	
 	self.navigationController.toolbarHidden = NO;
 
 	[self updateUI];
@@ -174,8 +205,11 @@
 - (void) viewWillDisappear: (BOOL) animated
 {
 	[self.webView stopLoading];
-
-	self.navigationController.toolbarHidden = YES;
+	
+	//	Em, the animation does not look very right for me
+	
+	[self.navigationController setToolbarHidden:[objc_getAssociatedObject(self, kAVWebViewControllerNavigationControllerToolbarWasHidden) boolValue] animated:animated];
+	objc_setAssociatedObject(self, kAVWebViewControllerNavigationControllerToolbarWasHidden, nil, OBJC_ASSOCIATION_ASSIGN);
 
 	[super viewWillDisappear: animated];
 }
@@ -220,16 +254,22 @@
 
 - (void) showActionSheet
 {
-	UIActionSheet *actionSheet = [[UIActionSheet alloc] initWithTitle: self.URLString 
+	NSString *actionSheetTitle = [self.representedURL absoluteString];
+	
+	actionSheetTitle = [actionSheetTitle stringByReplacingOccurrencesOfString:@"(^http://)|(/$)" withString:@"" options:NSRegularExpressionSearch range:NSMakeRange(0, [actionSheetTitle length])];
+	
+	UIActionSheet *actionSheet = [[UIActionSheet alloc] initWithTitle: actionSheetTitle
 															 delegate: self 
 													cancelButtonTitle: nil 
 											   destructiveButtonTitle: nil 
-													otherButtonTitles: @"Open in Safari", nil];
+													otherButtonTitles: nil];
+													
+	[actionSheet addButtonWithTitle: NSLocalizedString(@"Open in Safari", @"Open in Safari")];
 
 	if ([MFMailComposeViewController canSendMail])
-		[actionSheet addButtonWithTitle: @"Mail Link"];
+		[actionSheet addButtonWithTitle: NSLocalizedString(@"Mail Link", @"Mail Link")];
 
-	[actionSheet addButtonWithTitle: @"Cancel"];
+	[actionSheet addButtonWithTitle: NSLocalizedString(@"Cancel", @"Cancel")];
 	[actionSheet setCancelButtonIndex: actionSheet.numberOfButtons - 1];
 	[actionSheet showFromToolbar: self.navigationController.toolbar];
 	[actionSheet release];
@@ -245,16 +285,13 @@
 
 - (void) reload
 {
-	[self.webView loadRequest: [NSURLRequest requestWithURL: [NSURL URLWithString: self.URLString]]];
+	[self.webView loadRequest: [NSURLRequest requestWithURL: self.representedURL]];
 }
 
 - (BOOL) webView: (UIWebView *) webView shouldStartLoadWithRequest: (NSURLRequest *) request 
   navigationType: (UIWebViewNavigationType) navigationType
 {
-	[_URLString release];
-
-	_URLString = [request.URL.absoluteString copy];
-	
+	[self setRepresentedURL:request.URL triggeringRequestLoad:NO];
 	return YES;
 }
 
@@ -280,14 +317,14 @@
 {
 	if (buttonIndex == 0)
 	{
-		[[UIApplication sharedApplication] openURL: [NSURL URLWithString: self.URLString]];
+		[[UIApplication sharedApplication] openURL:self.representedURL];
 	}
 	else if (buttonIndex == 1)
 	{
 		MFMailComposeViewController *composer = [[MFMailComposeViewController alloc] init]; 
 
 		[composer setMailComposeDelegate: self]; 
-		[composer setMessageBody: self.URLString isHTML: NO];
+		[composer setMessageBody: [self.representedURL absoluteString] isHTML: NO];
 		[self presentModalViewController: composer animated: YES];
 		[composer release];
 	}
@@ -308,7 +345,6 @@
 
 - (void) viewDidUnload
 {
-	self.URLString = nil;
 	self.webView = nil;
 	self.backItem = nil;
 	self.forwardItem = nil;
@@ -324,7 +360,7 @@
 
 - (void) dealloc
 {
-	[_URLString release];
+	[_representedURL release];
 	[_webView release];
 	[_backItem release];
 	[_forwardItem release];
@@ -334,6 +370,7 @@
 	[_actionItem release];
 	[_fixedSpaceItem release];
 	[_flexibleSpaceItem release];
+	
 	[super dealloc];
 }
 
