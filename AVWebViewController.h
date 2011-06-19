@@ -13,11 +13,6 @@
 @class AVWebViewController;
 @protocol AVWebViewControllerDelegate
 
-- (NSURLRequest *) webViewController:(AVWebViewController *)controller shouldStartLoadingURLRequest:(NSURLRequest *)aRequest navigationType:(UIWebViewNavigationType)navigationType;
-//	Return aRequest to say yes
-//	Return nil to cancel the operation
-//	If a new request is returned, we’ll load something different from that request instead
-
 - (void) webViewControllerDidStartLoading:(AVWebViewController *)controller;
 - (void) webViewControllerDidFinishLoading:(AVWebViewController *)controller;
 - (void) webViewControllerDidFailLoading:(AVWebViewController *)controller withError:(NSError *)anError;
@@ -34,6 +29,7 @@
 
 - (void) reload;
 
+@property (nonatomic, readwrite, assign) id<AVWebViewControllerDelegate> delegate;
 @property (nonatomic, assign) BOOL allowsSendingHTMLContents; // defaults to NO
 
 @end

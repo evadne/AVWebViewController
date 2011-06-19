@@ -42,6 +42,7 @@
 @synthesize actionItem = _actionItem;
 @synthesize fixedSpaceItem = _fixedSpaceItem;
 @synthesize flexibleSpaceItem = _flexibleSpaceItem;
+@synthesize delegate = _delegate;
 @synthesize allowsSendingHTMLContents = _allowsSendingHTMLContents;
 
 
@@ -292,22 +293,24 @@ static NSString * const kAVWebViewControllerNavigationControllerToolbarWasHidden
 - (BOOL) webView: (UIWebView *) webView shouldStartLoadWithRequest: (NSURLRequest *) request 
   navigationType: (UIWebViewNavigationType) navigationType
 {
-	[self setRepresentedURL:request.URL triggeringRequestLoad:NO];
 	return YES;
 }
 
 - (void) webViewDidStartLoad: (UIWebView *) webView
 {
+	[self.delegate webViewControllerDidStartLoading:self];
 	[self updateUI];
 }
 
 - (void) webViewDidFinishLoad: (UIWebView *) webView
 {
+	[self.delegate webViewControllerDidFinishLoading:self];
 	[self updateUI];
 }
 
 - (void) webView: (UIWebView *) webView didFailLoadWithError: (NSError *) error
 {
+	[self.delegate webViewControllerDidFailLoading:self withError:error];
 	[self updateUI];
 }
 
